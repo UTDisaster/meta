@@ -28,7 +28,7 @@ git commit -m "some changes"
 # more changes...
 git add some-file.py
 git commit -m "more changes"
-# later...
+# more changes maybe..?
 git add .
 git commit -m "complete issue 123"
 ```
