@@ -1,0 +1,60 @@
+{
+  "release": {
+    "tag": "florence-complete-v1",
+    "url": "https://github.com/UTDisaster/meta/releases/tag/florence-complete-v1",
+    "asset": {
+      "name": "florence-hurricane-complete.tar.gz",
+      "size_bytes": 1541255212,
+      "sha256": "73e08cd2c5a43d50965c2dd990820b60a814366a72f2ccacf178d7223682ad97"
+    }
+  },
+  "dataset": {
+    "disaster_id": "hurricane-florence",
+    "disaster_type": "flooding",
+    "total_pairs": 546,
+    "total_images": 1092,
+    "total_locations": 11548,
+    "image_dimensions": [1024, 1024],
+    "image_format": "PNG (uint8 RGB)",
+    "geographic_extent": {
+      "min_lat": 33.5817,
+      "max_lat": 34.8926,
+      "min_lng": -79.0571,
+      "max_lng": -77.8366
+    },
+    "subsets": {
+      "hold": { "pairs": 119, "files": 714 },
+      "test": { "pairs": 108, "files": 648 },
+      "tier1": { "pairs": 319, "files": 1914 }
+    },
+    "classifications": {
+      "none": 8466,
+      "severe": 1949,
+      "unknown": 820,
+      "minor": 232,
+      "destroyed": 81
+    },
+    "targets": {
+      "count": 1092,
+      "format": "PNG (damage masks)"
+    },
+    "geotransforms": {
+      "file": "xview_geotransforms.json",
+      "size_bytes": 8345260
+    }
+  },
+  "source": {
+    "name": "xBD / xview2",
+    "url": "https://xview2.org/download-links",
+    "license": "See https://xview2.org for terms",
+    "archives_used": [
+      "train_images_labels_targets.tar",
+      "test_images_labels_targets.tar",
+      "hold_images_labels_targets.tar",
+      "xview_geotransforms.json.tgz"
+    ],
+    "archives_checked_no_florence": [
+      "tier3.tar"
+    ]
+  }
+}

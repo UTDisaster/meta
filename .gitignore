@@ -1,0 +1,26 @@
+# Working directories — never commit
+_downloads/
+_extracted/
+_staging/
+data-example/
+florence_complete/
+florence_merged/
+
+# Source archives — too big for git, downloaded from xview2.org
+*.tgz
+*.tar.gz
+*.tgz.part-*
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
