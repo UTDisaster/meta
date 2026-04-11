@@ -1,0 +1,51 @@
+services:
+  postgis:
+    image: postgis/postgis:16-3.4
+    container_name: utd-postgis
+    environment:
+      POSTGRES_USER: utd
+      POSTGRES_PASSWORD: utdpass
+      POSTGRES_DB: utd_data
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init-chat-schema.sql:/docker-entrypoint-initdb.d/10-chat-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U utd -d utd_data"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: ../meta/backend.Dockerfile
+    container_name: utd-backend
+    depends_on:
+      postgis:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: "postgresql+psycopg://utd:utdpass@postgis:5432/utd_data"
+      PARSED_DATA_DIR: ./data-example
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../backend/data-example:/app/data-example:ro
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: ../meta/frontend.Dockerfile
+    container_name: utd-frontend
+    depends_on:
+      - backend
+    environment:
+      VITE_API_BASE_URL: "http://localhost:8000"
+    ports:
+      - "5173:5173"
+
+volumes:
+  pgdata:
