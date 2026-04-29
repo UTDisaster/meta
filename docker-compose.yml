@@ -28,12 +28,15 @@ services:
     env_file:
       - .env
     environment:
+      APP_ENV: "dev"
       DATABASE_URL: "postgresql+psycopg://utd:utdpass@postgis:5432/utd_data"
-      PARSED_DATA_DIR: ./data-example
+      IMAGE_CONTENT_BASE_URL: "http://localhost:8000/assets"
+      PARSED_DATA_DIR: /app/data-example
+      VLM_DATASET_DIR: /app/data-example
     ports:
       - "8000:8000"
     volumes:
-      - ../backend/data-example:/app/data-example:ro
+      - ${HOST_DATA_EXAMPLE_DIR:-../florence-hurricane-complete/data-example}:/app/data-example:ro
 
   frontend:
     build:

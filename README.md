@@ -2,6 +2,8 @@
 
 Cross-cutting documentation, data pipeline, and reference data for the UTDisaster project.
 
+See [START.md](START.md) for a detailed guide on getting started and running the project.
+
 ## Repositories
 
 | Repo | Stack | Purpose |
