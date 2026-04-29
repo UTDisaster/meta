@@ -22,9 +22,7 @@ tar -xzf florence-hurricane-complete.tar.gz
 
 This will likely take a few minutes.
 
-## Running the Project
-
-### Quick Start
+## Quick Start
 
 To just start everything automatically altogether:
 ```sh
@@ -43,6 +41,8 @@ HOST_DATA_EXAMPLE_DIR=/absolute/path/to/florence-hurricane-complete/data-example
 ```
 
 You can ignore the reset of the steps in this section for most cases. They are for starting and running the individual services.
+
+## Manual Steps
 
 ### Database and Backend
 
