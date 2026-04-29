@@ -27,12 +27,6 @@ services:
         condition: service_healthy
     env_file:
       - .env
-    environment:
-      APP_ENV: "dev"
-      DATABASE_URL: "postgresql+psycopg://utd:utdpass@postgis:5432/utd_data"
-      IMAGE_CONTENT_BASE_URL: "http://localhost:8000/assets/images/hurricane-florence"
-      PARSED_DATA_DIR: /app/data-example
-      VLM_DATASET_DIR: /app/data-example
     ports:
       - "8000:8000"
     volumes:

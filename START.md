@@ -24,9 +24,19 @@ This will likely take a few minutes.
 
 ## Quick Start
 
-To just start everything automatically altogether:
+To just start everything automatically altogether, first init the env variables:
 ```sh
 cd meta
+make init-env
+```
+
+Make sure to add gemini key to this file if you want to test it. 
+
+If you want to test against prod db etc, set `APP_ENV=prod` in `.env` manually and make sure to add the proper api keys there.
+
+Then just run the bootstrap command to start everything.
+
+```sh
 make bootstrap
 ```
 
@@ -36,7 +46,7 @@ This command will:
 - load `parsed_data.json` into PostGIS
 - mount full `data-example` into backend and serve images from `/assets/images/hurricane-florence/<filename>.png`
 
-If your dataset is in a different location, set:
+If your dataset is in a different location, first set:
 ```sh
 HOST_DATA_EXAMPLE_DIR=/absolute/path/to/florence-hurricane-complete/data-example make bootstrap
 ```

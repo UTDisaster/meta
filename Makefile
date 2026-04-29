@@ -1,4 +1,4 @@
-.PHONY: help env-check up down reset logs bootstrap seed-db ps
+.PHONY: help init-env env-dev env-prod env-check up down reset logs bootstrap seed-db ps
 
 COMPOSE := docker compose -f docker-compose.yml
 DATASET_DEFAULT := ../florence-hurricane-complete/data-example
@@ -6,6 +6,9 @@ PARSED_JSON := /app/data-example/parsed_data.json
 
 help:
 	@echo "Targets:"
+	@echo "  make init-env   - create .env and .env.prod from examples (if missing)"
+	@echo "  make env-dev    - copy .env.example -> .env"
+	@echo "  make env-prod   - copy .env.prod.example -> .env.prod and .env"
 	@echo "  make up         - start postgis, backend, frontend"
 	@echo "  make bootstrap  - start stack and load parsed_data.json into DB"
 	@echo "  make seed-db    - load parsed_data.json into DB (backend must be up)"
@@ -14,11 +17,12 @@ help:
 	@echo "  make down       - stop stack"
 	@echo "  make reset      - destroy DB volume and restart clean"
 
+init-env:
+	@if [ ! -f .env ]; then cp .env.example .env; echo "Created .env from .env.example"; fi
+	@if [ ! -f .env.prod ]; then cp .env.prod.example .env.prod; echo "Created .env.prod from .env.prod.example"; fi
+
 env-check:
-	@if [ ! -f .env ]; then \
-		cp .env.example .env; \
-		echo "Created meta/.env from template. Fill GEMINI_API_KEY."; \
-	fi
+	@$(MAKE) init-env
 	@if [ ! -d "$${HOST_DATA_EXAMPLE_DIR:-$(DATASET_DEFAULT)}" ]; then \
 		echo "Dataset directory missing: $${HOST_DATA_EXAMPLE_DIR:-$(DATASET_DEFAULT)}"; \
 		echo "Expected parsed_data.json at: $${HOST_DATA_EXAMPLE_DIR:-$(DATASET_DEFAULT)}/parsed_data.json"; \
