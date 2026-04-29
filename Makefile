@@ -24,6 +24,10 @@ env-check:
 		echo "Expected parsed_data.json at: $${HOST_DATA_EXAMPLE_DIR:-$(DATASET_DEFAULT)}/parsed_data.json"; \
 		exit 1; \
 	fi
+	@if [ ! -d "$${HOST_DATA_EXAMPLE_DIR:-$(DATASET_DEFAULT)}/images/hurricane-florence" ]; then \
+		echo "Images directory missing: $${HOST_DATA_EXAMPLE_DIR:-$(DATASET_DEFAULT)}/images/hurricane-florence"; \
+		exit 1; \
+	fi
 
 up: env-check
 	$(COMPOSE) up -d --build postgis backend frontend

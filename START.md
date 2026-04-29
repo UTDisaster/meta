@@ -34,6 +34,7 @@ This command will:
 - start PostGIS + backend + frontend containers
 - validate dataset path (`../florence-hurricane-complete/data-example` by default)
 - load `parsed_data.json` into PostGIS
+- mount full `data-example` into backend and serve images from `/assets/images/hurricane-florence/<filename>.png`
 
 If your dataset is in a different location, set:
 ```sh
