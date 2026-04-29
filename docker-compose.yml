@@ -27,10 +27,13 @@ services:
         condition: service_healthy
     env_file:
       - .env
+      - .env.prod
     ports:
       - "8000:8000"
     volumes:
       - ${HOST_DATA_EXAMPLE_DIR:-../florence-hurricane-complete/data-example}:/app/data-example:ro
+      - ./.env:/app/.env:ro
+      - ./.env.prod:/app/.env.prod:ro
 
   frontend:
     build:

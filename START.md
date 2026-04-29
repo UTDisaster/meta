@@ -45,6 +45,7 @@ This command will:
 - validate dataset path (`../florence-hurricane-complete/data-example` by default)
 - load `parsed_data.json` into PostGIS
 - mount full `data-example` into backend and serve images from `/assets/images/hurricane-florence/<filename>.png`
+- mount `meta/.env` and `meta/.env.prod` into backend so `APP_ENV=prod` overlays `.env.prod`
 
 If your dataset is in a different location, first set:
 ```sh
