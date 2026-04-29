@@ -27,13 +27,13 @@ services:
         condition: service_healthy
     env_file:
       - .env
-    environment:
-      DATABASE_URL: "postgresql+psycopg://utd:utdpass@postgis:5432/utd_data"
-      PARSED_DATA_DIR: ./data-example
+      - .env.prod
     ports:
       - "8000:8000"
     volumes:
-      - ../backend/data-example:/app/data-example:ro
+      - ${HOST_DATA_EXAMPLE_DIR:-../florence-hurricane-complete/data-example}:/app/data-example:ro
+      - ./.env:/app/.env:ro
+      - ./.env.prod:/app/.env.prod:ro
 
   frontend:
     build:
