@@ -3,7 +3,7 @@
 	up down logs ps \
 	migrate-db preprocess vlm-predictions enrich-addresses all-preprocessing \
 	export-db import-db \
-	bootstrap reset
+	bootstrap bootstrap-full reset
 
 COMPOSE := docker compose -f docker-compose.yml
 DATASET_DEFAULT := ../florence-hurricane-complete/data-example
@@ -25,16 +25,13 @@ help:
 	@echo "  make up                - start postgis + backend + frontend"
 	@echo "  make down              - stop stack"
 	@echo "  make logs              - tail logs"
-	@echo "  make bootstrap         - first-time machine setup flow"
+	@echo "  make bootstrap         - first-time bootstrap using import-db snapshot"
+	@echo "  make bootstrap-full    - full from-scratch preprocessing (includes VLM + enrich)"
 	@echo "  make reset             - reset running setup (fresh DB + full preprocessing)"
 
 init-env:
 	@if [ ! -f .env ]; then cp .env.example .env; echo "Created .env from .env.example"; fi
 	@if [ ! -f .env.prod ]; then cp .env.prod.example .env.prod; echo "Created .env.prod from .env.prod.example"; fi
-
-env-dev:
-	cp .env.example .env
-	@echo "Active env set to dev via .env.example"
 
 env-prod:
 	cp .env.prod.example .env.prod
@@ -117,8 +114,11 @@ import-db:
 	$(COMPOSE) exec -T backend sh -lc "PYTHONPATH=/app python /app/util/import_db_snapshot.py --input $(SNAPSHOT_CONTAINER)"
 	@echo "Seed complete from $(SNAPSHOT_HOST)"
 
-bootstrap: up all-preprocessing
-	@echo "Bootstrap complete."
+bootstrap: up migrate-db import-db
+	@echo "Bootstrap (import mode) complete."
+
+bootstrap-full: up all-preprocessing
+	@echo "Bootstrap (full preprocessing) complete."
 
 reset:
 	$(COMPOSE) down -v --remove-orphans
