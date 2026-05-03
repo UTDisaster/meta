@@ -2,7 +2,7 @@
 	help init init-env env-dev env-prod env-check \
 	up down logs ps \
 	migrate-db preprocess vlm-predictions enrich-addresses all-preprocessing \
-	export-db import-db \
+	export-db import-db prod-migrate-import \
 	bootstrap bootstrap-full reset
 
 COMPOSE := docker compose -f docker-compose.yml
@@ -22,6 +22,7 @@ help:
 	@echo "  make all-preprocessing - run preprocess + vlm-predictions + enrich-addresses"
 	@echo "  make export-db         - export DB snapshot JSON to $(SNAPSHOT_HOST)"
 	@echo "  make import-db         - import snapshot JSON from $(SNAPSHOT_HOST) safely"
+	@echo "  make prod-migrate-import - run migrate-db + import-db against DATABASE_URL in .env.prod"
 	@echo "  make up                - start postgis + backend + frontend"
 	@echo "  make down              - stop stack"
 	@echo "  make logs              - tail logs"
@@ -113,6 +114,29 @@ import-db:
 	docker cp $(SNAPSHOT_HOST) utd-backend:$(SNAPSHOT_CONTAINER)
 	$(COMPOSE) exec -T backend sh -lc "PYTHONPATH=/app python /app/util/import_db_snapshot.py --input $(SNAPSHOT_CONTAINER)"
 	@echo "Seed complete from $(SNAPSHOT_HOST)"
+
+prod-migrate-import:
+	@if [ ! -f ".env.prod" ]; then \
+		echo "Missing .env.prod. Run 'make init-env' and fill .env.prod first."; \
+		exit 1; \
+	fi
+	@if [ ! -f "$(SNAPSHOT_HOST)" ]; then \
+		echo "Snapshot not found: $(SNAPSHOT_HOST). Run 'make export-db' first."; \
+		exit 1; \
+	fi
+	@prod_db_url=$$(awk -F= '/^DATABASE_URL=/{sub(/^DATABASE_URL=/,""); print; exit}' .env.prod); \
+	if [ -z "$$prod_db_url" ]; then \
+		echo "DATABASE_URL is missing in .env.prod"; \
+		exit 1; \
+	fi; \
+	if ! $(COMPOSE) ps backend --status running >/dev/null 2>&1; then \
+		echo "Backend container is not running. Start it first with 'make up'."; \
+		exit 1; \
+	fi; \
+	docker cp $(SNAPSHOT_HOST) utd-backend:$(SNAPSHOT_CONTAINER); \
+	$(COMPOSE) exec -T -e DATABASE_URL="$$prod_db_url" backend python -m util.migrate; \
+	$(COMPOSE) exec -T -e DATABASE_URL="$$prod_db_url" backend sh -lc "PYTHONPATH=/app python /app/util/import_db_snapshot.py --input $(SNAPSHOT_CONTAINER)"; \
+	echo "Prod migrate+import complete using DATABASE_URL from .env.prod"
 
 bootstrap: up migrate-db import-db
 	@echo "Bootstrap (import mode) complete."
