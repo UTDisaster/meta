@@ -34,7 +34,7 @@ Make sure to add gemini key to this file if you want to test it.
 
 If you want to test against prod db etc, set `APP_ENV=prod` in `.env` manually and make sure to add the proper api keys there.
 
-Then just run the bootstrap command to start everything.
+For first-time setup, run bootstrap once:
 
 ```sh
 make bootstrap
@@ -42,14 +42,27 @@ make bootstrap
 
 This command will:
 - start PostGIS + backend + frontend containers
+- run backend SQL migrations (`backend/migrations/*.sql`)
 - validate dataset path (`../florence-hurricane-complete/data-example` by default)
 - load `parsed_data.json` into PostGIS
+- run address enrichment (`util/enrich_addresses.py`) until `locations.full_address` is populated
+- use `data-example/address_map.json` first when present, then Census fallback for misses
 - mount full `data-example` into backend and serve images from `/assets/images/hurricane-florence/<filename>.png`
 - mount `meta/.env` and `meta/.env.prod` into backend so `APP_ENV=prod` overlays `.env.prod`
 
 If your dataset is in a different location, first set:
 ```sh
 HOST_DATA_EXAMPLE_DIR=/absolute/path/to/florence-hurricane-complete/data-example make bootstrap
+```
+
+For subsequent runs (no DB re-init/reload), use:
+```sh
+make up
+```
+
+To export the current DB-enriched addresses back into a reusable map:
+```sh
+make export-address-map
 ```
 
 You can ignore the reset of the steps in this section for most cases. They are for starting and running the individual services.

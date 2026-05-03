@@ -25,9 +25,7 @@ services:
     depends_on:
       postgis:
         condition: service_healthy
-    env_file:
-      - .env
-      - .env.prod
+    env_file: .env
     ports:
       - "8000:8000"
     volumes:
