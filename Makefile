@@ -2,7 +2,7 @@
 	help init init-env env-dev env-prod env-check \
 	up down logs ps \
 	migrate-db preprocess vlm-predictions enrich-addresses all-preprocessing \
-	export-db import-db prod-migrate-import \
+	export-db import-db verify-db-load prod-migrate-import \
 	bootstrap bootstrap-full reset
 
 COMPOSE := docker compose -f docker-compose.yml
@@ -22,6 +22,7 @@ help:
 	@echo "  make all-preprocessing - run preprocess + vlm-predictions + enrich-addresses"
 	@echo "  make export-db         - export DB snapshot JSON to $(SNAPSHOT_HOST)"
 	@echo "  make import-db         - import snapshot JSON from $(SNAPSHOT_HOST) safely"
+	@echo "  make verify-db-load    - verify required DB tables/data exist after import/load"
 	@echo "  make prod-migrate-import - run migrate-db + import-db against DATABASE_URL in .env.prod"
 	@echo "  make up                - start postgis + backend + frontend"
 	@echo "  make down              - stop stack"
@@ -72,14 +73,14 @@ logs:
 ps:
 	$(COMPOSE) ps
 
-migrate-db:
-	$(COMPOSE) exec -T backend python -m util.migrate
-	@echo "Migrations applied."
-
-preprocess: migrate-db
+preprocess:
 	$(COMPOSE) exec -T backend test -f $(PARSED_JSON)
 	$(COMPOSE) exec -T backend sh -lc "PYTHONPATH=/app python util/preprocess-data.py --start-at load --stop-after load --input $(PARSED_JSON)"
 	@echo "Preprocess load complete."
+
+migrate-db: preprocess
+	$(COMPOSE) exec -T backend python -m util.migrate
+	@echo "Migrations applied."
 
 vlm-predictions:
 	$(COMPOSE) exec -T backend sh -lc "PYTHONPATH=/app python util/preprocess-data.py --start-at vlm --stop-after vlm"
@@ -115,6 +116,20 @@ import-db:
 	$(COMPOSE) exec -T backend sh -lc "PYTHONPATH=/app python /app/util/import_db_snapshot.py --input $(SNAPSHOT_CONTAINER)"
 	@echo "Seed complete from $(SNAPSHOT_HOST)"
 
+verify-db-load:
+	$(COMPOSE) exec -T postgis psql -U utd -d utd_data -v ON_ERROR_STOP=1 -c \
+	"SELECT to_regclass('public.disasters') AS disasters, to_regclass('public.image_pairs') AS image_pairs, to_regclass('public.locations') AS locations;"
+	$(COMPOSE) exec -T postgis psql -U utd -d utd_data -v ON_ERROR_STOP=1 -c \
+	"SELECT (SELECT count(*) FROM disasters) AS disasters, (SELECT count(*) FROM image_pairs) AS image_pairs, (SELECT count(*) FROM locations) AS locations;"
+	@counts=$$($(COMPOSE) exec -T postgis psql -U utd -d utd_data -t -A -F, -c "SELECT (SELECT count(*) FROM image_pairs), (SELECT count(*) FROM locations);"); \
+	ip_count=$$(echo $$counts | cut -d, -f1 | tr -d '[:space:]'); \
+	loc_count=$$(echo $$counts | cut -d, -f2 | tr -d '[:space:]'); \
+	if [ "$$ip_count" = "0" ] || [ "$$loc_count" = "0" ]; then \
+		echo "DB verification failed: image_pairs=$$ip_count locations=$$loc_count after import/load"; \
+		exit 1; \
+	fi
+	@echo "DB verification passed."
+
 prod-migrate-import:
 	@if [ ! -f ".env.prod" ]; then \
 		echo "Missing .env.prod. Run 'make init-env' and fill .env.prod first."; \
@@ -138,7 +153,16 @@ prod-migrate-import:
 	$(COMPOSE) exec -T -e DATABASE_URL="$$prod_db_url" backend sh -lc "PYTHONPATH=/app python /app/util/import_db_snapshot.py --input $(SNAPSHOT_CONTAINER)"; \
 	echo "Prod migrate+import complete using DATABASE_URL from .env.prod"
 
-bootstrap: up migrate-db import-db
+bootstrap:
+	@if [ ! -f "$(SNAPSHOT_HOST)" ]; then \
+		echo "Bootstrap requires snapshot $(SNAPSHOT_HOST) but it was not found."; \
+		echo "Run 'make export-db' from a source environment first, then retry."; \
+		exit 1; \
+	fi
+	$(MAKE) up
+	$(MAKE) migrate-db
+	$(MAKE) import-db
+	$(MAKE) verify-db-load
 	@echo "Bootstrap (import mode) complete."
 
 bootstrap-full: up all-preprocessing
