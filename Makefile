@@ -1,6 +1,7 @@
 .PHONY: \
 	help init init-env env-dev env-prod env-check \
 	up down logs ps \
+	guard-non-prod \
 	migrate-db preprocess vlm-predictions enrich-addresses all-preprocessing \
 	export-db import-db verify-db-load prod-migrate-import \
 	bootstrap bootstrap-full reset
@@ -30,6 +31,9 @@ help:
 	@echo "  make bootstrap         - first-time bootstrap using import-db snapshot"
 	@echo "  make bootstrap-full    - full from-scratch preprocessing (includes VLM + enrich)"
 	@echo "  make reset             - reset running setup (fresh DB + full preprocessing)"
+	@echo ""
+	@echo "Safety:"
+	@echo "  DB-mutating targets are blocked when APP_ENV=prod."
 
 init-env:
 	@if [ ! -f .env ]; then cp .env.example .env; echo "Created .env from .env.example"; fi
@@ -73,20 +77,29 @@ logs:
 ps:
 	$(COMPOSE) ps
 
-preprocess:
+guard-non-prod:
+	@env_value="$${APP_ENV:-$$(awk -F= '/^APP_ENV=/{print $$2; exit}' .env 2>/dev/null)}"; \
+	env_value=$$(printf "%s" "$$env_value" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]'); \
+	if [ "$$env_value" = "prod" ]; then \
+		echo "Blocked target '$(if $(MAKECMDGOALS),$(MAKECMDGOALS),unknown)': APP_ENV=prod (DB-mutating command disabled)."; \
+		echo "Set APP_ENV=dev (or switch to a non-prod .env) to run this target."; \
+		exit 1; \
+	fi
+
+preprocess: guard-non-prod
 	$(COMPOSE) exec -T backend test -f $(PARSED_JSON)
 	$(COMPOSE) exec -T backend sh -lc "PYTHONPATH=/app python util/preprocess-data.py --start-at load --stop-after load --input $(PARSED_JSON)"
 	@echo "Preprocess load complete."
 
-migrate-db: preprocess
+migrate-db: guard-non-prod preprocess
 	$(COMPOSE) exec -T backend python -m util.migrate
 	@echo "Migrations applied."
 
-vlm-predictions:
+vlm-predictions: guard-non-prod
 	$(COMPOSE) exec -T backend sh -lc "PYTHONPATH=/app python util/preprocess-data.py --start-at vlm --stop-after vlm"
 	@echo "VLM predictions complete."
 
-enrich-addresses:
+enrich-addresses: guard-non-prod
 	@echo "Enriching addresses in batches..."
 	@while true; do \
 		remaining=$$($(COMPOSE) exec -T postgis psql -U utd -d utd_data -t -A -c "SELECT COUNT(*) FROM locations WHERE address_fetched_at IS NULL;"); \
@@ -99,20 +112,20 @@ enrich-addresses:
 		$(COMPOSE) exec -T backend sh -lc "PYTHONPATH=/app python -m util.enrich_addresses --limit 1000"; \
 	done
 
-all-preprocessing: preprocess vlm-predictions enrich-addresses
+all-preprocessing: guard-non-prod preprocess vlm-predictions enrich-addresses
 	@echo "All preprocessing steps complete."
 
 export-db:
 	$(COMPOSE) exec -T backend sh -lc "PYTHONPATH=/app python /app/util/export_db_snapshot.py --output $(SNAPSHOT_CONTAINER) --pretty"
-	docker cp utd-backend:$(SNAPSHOT_CONTAINER) $(SNAPSHOT_HOST)
+	$(COMPOSE) cp backend:$(SNAPSHOT_CONTAINER) $(SNAPSHOT_HOST)
 	@echo "Snapshot exported to $(SNAPSHOT_HOST)"
 
-import-db:
+import-db: guard-non-prod
 	@if [ ! -f "$(SNAPSHOT_HOST)" ]; then \
 		echo "Snapshot not found: $(SNAPSHOT_HOST). Run 'make export-db' first."; \
 		exit 1; \
 	fi
-	docker cp $(SNAPSHOT_HOST) utd-backend:$(SNAPSHOT_CONTAINER)
+	$(COMPOSE) cp $(SNAPSHOT_HOST) backend:$(SNAPSHOT_CONTAINER)
 	$(COMPOSE) exec -T backend sh -lc "PYTHONPATH=/app python /app/util/import_db_snapshot.py --input $(SNAPSHOT_CONTAINER)"
 	@echo "Seed complete from $(SNAPSHOT_HOST)"
 
@@ -148,12 +161,12 @@ prod-migrate-import:
 		echo "Backend container is not running. Start it first with 'make up'."; \
 		exit 1; \
 	fi; \
-	docker cp $(SNAPSHOT_HOST) utd-backend:$(SNAPSHOT_CONTAINER); \
+	$(COMPOSE) cp $(SNAPSHOT_HOST) backend:$(SNAPSHOT_CONTAINER); \
 	$(COMPOSE) exec -T -e DATABASE_URL="$$prod_db_url" backend python -m util.migrate; \
 	$(COMPOSE) exec -T -e DATABASE_URL="$$prod_db_url" backend sh -lc "PYTHONPATH=/app python /app/util/import_db_snapshot.py --input $(SNAPSHOT_CONTAINER)"; \
 	echo "Prod migrate+import complete using DATABASE_URL from .env.prod"
 
-bootstrap:
+bootstrap: guard-non-prod
 	@if [ ! -f "$(SNAPSHOT_HOST)" ]; then \
 		echo "Bootstrap requires snapshot $(SNAPSHOT_HOST) but it was not found."; \
 		echo "Run 'make export-db' from a source environment first, then retry."; \
@@ -165,11 +178,5 @@ bootstrap:
 	$(MAKE) verify-db-load
 	@echo "Bootstrap (import mode) complete."
 
-bootstrap-full: up all-preprocessing
+bootstrap-full: guard-non-prod up all-preprocessing
 	@echo "Bootstrap (full preprocessing) complete."
-
-reset:
-	$(COMPOSE) down -v --remove-orphans
-	$(MAKE) up
-	$(MAKE) all-preprocessing
-	@echo "Reset complete."
