@@ -13,152 +13,132 @@ git clone git@github.com:UTDisaster/backend.git
 git clone git@github.com:UTDisaster/meta.git
 ```
 
-Pull the full dataset from GitHub release (or download the archive manually) and extract it:
+Pull the full dataset from GitHub release (or download manually) and extract it:
 
 ```sh
 gh release download florence-complete-v1 --repo UTDisaster/meta --pattern '*.tar.gz'
 tar -xzf florence-hurricane-complete.tar.gz
 ```
 
-This will likely take a few minutes.
+This may take a few minutes.
 
-## Quick Start
+## Project Workflow (meta/Makefile)
 
-To just start everything automatically altogether, first init the env variables:
+All project orchestration is now centralized in `meta/Makefile`.
+
+From `meta/`:
+
+```sh
+cd meta
+make help
+```
+
+Current primary targets:
+
+- `make init` - basic initialization checks
+- `make init-env` - create `.env` and `.env.prod` from examples if missing
+- `make up` / `make down` - start/stop PostGIS + backend + frontend
+- `make logs` - tail logs
+- `make migrate-db` - apply backend SQL migrations
+- `make preprocess` - load `parsed_data.json` into DB
+- `make vlm-predictions` - run VLM predictions and store assessments
+- `make enrich-addresses` - fill address fields (map-first, Census fallback)
+- `make all-preprocessing` - run preprocess + VLM + enrich
+- `make export-db` - export DB snapshot JSON to `meta/artifacts/db_snapshot.json`
+- `make import-db` - import `meta/artifacts/db_snapshot.json` safely
+- `make bootstrap` - startup path using import snapshot
+- `make bootstrap-full` - full from-scratch data processing path
+- `make prod-migrate-import` - run migrate+import against `DATABASE_URL` in `.env.prod`
+- `make reset` - destroy local volumes, start fresh, then run full preprocessing
+
+## Standard Local Flows
+
+### 1) First-time setup using snapshot import (recommended)
+
 ```sh
 cd meta
 make init-env
-```
-
-Make sure to add gemini key to this file if you want to test it. 
-
-If you want to test against prod db etc, set `APP_ENV=prod` in `.env` manually and make sure to add the proper api keys there.
-
-For first-time setup, run bootstrap once:
-
-```sh
+# fill .env values (and .env.prod if needed)
+make up
 make bootstrap
 ```
 
-This command will:
-- start PostGIS + backend + frontend containers
-- run backend SQL migrations (`backend/migrations/*.sql`)
-- validate dataset path (`../florence-hurricane-complete/data-example` by default)
-- load `parsed_data.json` into PostGIS
-- run address enrichment (`util/enrich_addresses.py`) until `locations.full_address` is populated
-- use `data-example/address_map.json` first when present, then Census fallback for misses
-- mount full `data-example` into backend and serve images from `/assets/images/hurricane-florence/<filename>.png`
-- mount `meta/.env` and `meta/.env.prod` into backend so `APP_ENV=prod` overlays `.env.prod`
+`bootstrap` runs:
+- `up`
+- `migrate-db`
+- `import-db`
 
-If your dataset is in a different location, first set:
+In order for boostrap to work, you will have to have the `artifacts/db_snapshot.json` file in meta root.
+
+### 2) Full from-scratch pipeline
+
+Alternatively to re-fetch the VLM classifications and run address enrichment from API. Unless the data in the db snapshot are outdated, you shouldn't need to do this step.
+
 ```sh
-HOST_DATA_EXAMPLE_DIR=/absolute/path/to/florence-hurricane-complete/data-example make bootstrap
+cd meta
+make up
+make bootstrap-full
 ```
 
-For subsequent runs (no DB re-init/reload), use:
+`bootstrap-full` runs:
+- `up`
+- `all-preprocessing` (`preprocess`, `vlm-predictions`, `enrich-addresses`)
+
+### 3) Subsequent runs
+
 ```sh
+cd meta
 make up
 ```
 
-To export the current DB-enriched addresses back into a reusable map:
-```sh
-make export-address-map
-```
+## Data Snapshot Workflow
 
-You can ignore the reset of the steps in this section for most cases. They are for starting and running the individual services.
-
-## Manual Steps
-
-### Database and Backend
-
-cd to the backend directory.
-
-Copy `.env.example` to `.env` and add your api keys for testing. 
+### Export DB snapshot
 
 ```sh
-cp .env.example .env
-cp .env.prod.example .env.prod
+cd meta
+make export-db
 ```
 
-Do the same with `.env.prod` (second line) if you want to test against production environment (not always necessary). When testing with prod you can just change the `APP_ENV` variable to `prod` from dev and it will load that file instead.
+Writes:
+- `meta/artifacts/db_snapshot.json`
 
-Start the database (clean):
+### Import DB snapshot safely
 
 ```sh
-docker compose down -v --remove-orphans
-docker compose up -d db
-until docker compose exec -T db pg_isready -U utd -d utd_data >/dev/null 2>&1; do
-  echo "waiting for db..."
-  sleep 2
-done
-echo "db ready"
+cd meta
+make import-db
 ```
 
-Install the dependencies needed for preprocessing/vlm:
+`import-db` is transactional inside the import script. If import fails, DB changes are rolled back.
 
-```bash
-uv venv
-source .venv/bin/activate
-uv pip install -r requirements.txt
-```
+## Production/Remote DB Migrate + Import
 
-Then load dataset into the DB:
+To apply migrations and import snapshot against remote/prod DB:
+
+1. Ensure `meta/.env.prod` exists and has valid `DATABASE_URL`.
+2. Ensure backend container is running (`make up`).
+3. Ensure snapshot exists (`make export-db` first, if needed).
+
+Then run:
 
 ```sh
-DATABASE_URL=postgresql+psycopg://utd:utdpass@127.0.0.1:5433/utd_data \
-.venv/bin/python util/preprocess-data.py \
-  --start-at load \
-  --stop-after load \
-  --input ../florence-hurricane-complete/data-example/parsed_data.json
+cd meta
+make prod-migrate-import
 ```
 
-Load additional chat schema:
+This target uses `DATABASE_URL` from `.env.prod` directly and does not overwrite `.env`.
+
+## Environment Notes
+
+- Default dataset location expected by Makefile:
+  - `../florence-hurricane-complete/data-example`
+- Override dataset path for commands with:
 
 ```sh
-docker exec -i "$(docker compose ps -q db)" psql -U utd -d utd_data < ../meta/init-chat-schema.sql
+HOST_DATA_EXAMPLE_DIR=/absolute/path/to/florence-hurricane-complete/data-example make <target>
 ```
 
-Quick verification:
-
-```sh
-docker exec -i "$(docker compose ps -q db)" psql -U utd -d utd_data -c \
-"select to_regclass('public.disasters'), to_regclass('public.image_pairs'), to_regclass('public.locations'), to_regclass('chat.vlm_assessments');"
-
-docker exec -i "$(docker compose ps -q db)" psql -U utd -d utd_data -c \
-"select (select count(*) from disasters) as disasters, (select count(*) from image_pairs) as image_pairs, (select count(*) from locations) as locations;"
-```
-
-If you see `(1 row)` printed twice, everything is good.
-
-Start the backend api:
-
-```sh
-docker compose up -d --build --force-recreate api
-docker compose logs -f api
-```
-
-Remember to shut it down after you are done testing or making changes:
-
-```sh
-docker compose down
-```
-
-### Frontend
-
-cd to the frontend directory.
-
-Install the dependencies:
-
-```sh
-npm i
-```
-
-Run the client:
-
-```sh
-npm run dev
-```
-
-## Batch VLM Predictions
-
-soon
+- Address enrichment behavior:
+  - If `address_map.json` exists in data folder, enrichment uses it first.
+  - Misses fall back to Census geocoder unless map-only mode is used in direct script invocation.
